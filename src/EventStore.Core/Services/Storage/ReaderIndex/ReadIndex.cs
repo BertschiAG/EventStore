@@ -12,128 +12,123 @@ using EventStore.Core.TransactionLog.Checkpoint;
 using EventStore.Core.TransactionLog.Chunks;
 using EventStore.Core.Util;
 
-namespace EventStore.Core.Services.Storage.ReaderIndex
-{
-    public class ReadIndex : IDisposable, IReadIndex
-    {
-        public long LastCommitPosition { get { return _indexCommitter.LastCommitPosition; } }
-        public long LastReplicatedPosition { get {return _replicationCheckpoint.ReadNonFlushed(); } }
-        public IIndexWriter IndexWriter { get { return _indexWriter; } }
-        public IIndexCommitter IndexCommitter { get { return _indexCommitter; } }
+namespace EventStore.Core.Services.Storage.ReaderIndex {
+	public class ReadIndex : IDisposable, IReadIndex {
+		public long LastCommitPosition {
+			get { return _indexCommitter.LastCommitPosition; }
+		}
 
-        private readonly IIndexBackend _indexBackend;
-        private readonly IIndexReader _indexReader;
-        private readonly IIndexWriter _indexWriter;
-        private readonly IIndexCommitter _indexCommitter;
-        private readonly IAllReader _allReader;
-        private readonly ICheckpoint _replicationCheckpoint;
+		public long LastReplicatedPosition {
+			get { return _replicationCheckpoint.ReadNonFlushed(); }
+		}
 
-        public ReadIndex(IPublisher bus,
-                         ObjectPool<ITransactionFileReader> readerPool,
-                         ITableIndex tableIndex,
-                         int streamInfoCacheCapacity,
-                         bool additionalCommitChecks,
-                         long metastreamMaxCount,
-                         int hashCollisionReadLimit,
-                         bool skipIndexScanOnReads,
-                         ICheckpoint replicationCheckpoint)
-        {
-            Ensure.NotNull(bus, "bus");
-            Ensure.NotNull(readerPool, "readerPool");
-            Ensure.NotNull(tableIndex, "tableIndex");
-            Ensure.Nonnegative(streamInfoCacheCapacity, "streamInfoCacheCapacity");
-            Ensure.Positive(metastreamMaxCount, "metastreamMaxCount");
-            Ensure.NotNull(replicationCheckpoint, "replicationCheckpoint");
+		public IIndexWriter IndexWriter {
+			get { return _indexWriter; }
+		}
 
-            var metastreamMetadata = new StreamMetadata(maxCount: metastreamMaxCount);
+		public IIndexCommitter IndexCommitter {
+			get { return _indexCommitter; }
+		}
 
-            _indexBackend = new IndexBackend(readerPool, streamInfoCacheCapacity, streamInfoCacheCapacity);
-            _indexReader = new IndexReader(_indexBackend, tableIndex, metastreamMetadata, hashCollisionReadLimit, skipIndexScanOnReads);
-            _indexWriter = new IndexWriter(_indexBackend, _indexReader);
-            _indexCommitter = new IndexCommitter(bus, _indexBackend, _indexReader, tableIndex, additionalCommitChecks);
-            _allReader = new AllReader(_indexBackend, _indexCommitter, replicationCheckpoint);
-            _replicationCheckpoint = replicationCheckpoint;
-        }
+		private readonly IIndexBackend _indexBackend;
+		private readonly IIndexReader _indexReader;
+		private readonly IIndexWriter _indexWriter;
+		private readonly IIndexCommitter _indexCommitter;
+		private readonly IAllReader _allReader;
+		private readonly ICheckpoint _replicationCheckpoint;
 
-        void IReadIndex.Init(long buildToPosition)
-        {
-            _indexCommitter.Init(buildToPosition);
-        }
+		public ReadIndex(IPublisher bus,
+			ObjectPool<ITransactionFileReader> readerPool,
+			ITableIndex tableIndex,
+			int streamInfoCacheCapacity,
+			bool additionalCommitChecks,
+			long metastreamMaxCount,
+			int hashCollisionReadLimit,
+			bool skipIndexScanOnReads,
+			ICheckpoint replicationCheckpoint) {
+			Ensure.NotNull(bus, "bus");
+			Ensure.NotNull(readerPool, "readerPool");
+			Ensure.NotNull(tableIndex, "tableIndex");
+			Ensure.Nonnegative(streamInfoCacheCapacity, "streamInfoCacheCapacity");
+			Ensure.Positive(metastreamMaxCount, "metastreamMaxCount");
+			Ensure.NotNull(replicationCheckpoint, "replicationCheckpoint");
 
-        IndexReadEventResult IReadIndex.ReadEvent(string streamId, long eventNumber)
-        {
-            return _indexReader.ReadEvent(streamId, eventNumber);
-        }
+			var metastreamMetadata = new StreamMetadata(maxCount: metastreamMaxCount);
 
-        IndexReadStreamResult IReadIndex.ReadStreamEventsForward(string streamId, long fromEventNumber, int maxCount)
-        {
-            return _indexReader.ReadStreamEventsForward(streamId, fromEventNumber, maxCount);
-        }
+			_indexBackend = new IndexBackend(readerPool, streamInfoCacheCapacity, streamInfoCacheCapacity);
+			_indexReader = new IndexReader(_indexBackend, tableIndex, metastreamMetadata, hashCollisionReadLimit,
+				skipIndexScanOnReads);
+			_indexWriter = new IndexWriter(_indexBackend, _indexReader);
+			_indexCommitter = new IndexCommitter(bus, _indexBackend, _indexReader, tableIndex, additionalCommitChecks);
+			_allReader = new AllReader(_indexBackend, _indexCommitter, replicationCheckpoint);
+			_replicationCheckpoint = replicationCheckpoint;
+		}
 
-        IndexReadStreamResult IReadIndex.ReadStreamEventsBackward(string streamId, long fromEventNumber, int maxCount)
-        {
-            return _indexReader.ReadStreamEventsBackward(streamId, fromEventNumber, maxCount);
-        }
+		void IReadIndex.Init(long buildToPosition) {
+			_indexCommitter.Init(buildToPosition);
+		}
 
-        bool IReadIndex.IsStreamDeleted(string streamId)
-        {
-            return _indexReader.GetStreamLastEventNumber(streamId) == EventNumber.DeletedStream;
-        }
+		IndexReadEventResult IReadIndex.ReadEvent(string streamId, long eventNumber) {
+			return _indexReader.ReadEvent(streamId, eventNumber);
+		}
 
-        long IReadIndex.GetStreamLastEventNumber(string streamId)
-        {
-            return _indexReader.GetStreamLastEventNumber(streamId);
-        }
+		IndexReadStreamResult IReadIndex.ReadStreamEventsForward(string streamId, long fromEventNumber, int maxCount) {
+			return _indexReader.ReadStreamEventsForward(streamId, fromEventNumber, maxCount);
+		}
 
-        StreamMetadata IReadIndex.GetStreamMetadata(string streamId)
-        {
-            return _indexReader.GetStreamMetadata(streamId);
-        }
+		IndexReadAllFilteredResult IReadIndex.ReadAllEventsForwardFiltered(TFPos pos, int maxCount, int maxSearchWindow, StringFilter allowedEventTypes)
+		{
+			return _allReader.ReadAllEventsForwardFiltered(pos, maxCount, maxSearchWindow, allowedEventTypes);
+		}
+		
+		IndexReadStreamResult IReadIndex.ReadStreamEventsBackward(string streamId, long fromEventNumber, int maxCount) {
+			return _indexReader.ReadStreamEventsBackward(streamId, fromEventNumber, maxCount);
+		}
 
-        public string GetEventStreamIdByTransactionId(long transactionId)
-        {
-            return _indexReader.GetEventStreamIdByTransactionId(transactionId);
-        }
+		bool IReadIndex.IsStreamDeleted(string streamId) {
+			return _indexReader.GetStreamLastEventNumber(streamId) == EventNumber.DeletedStream;
+		}
 
-        StreamAccess IReadIndex.CheckStreamAccess(string streamId, StreamAccessType streamAccessType, IPrincipal user)
-        {
-            return _indexReader.CheckStreamAccess(streamId, streamAccessType, user);
-        }
+		long IReadIndex.GetStreamLastEventNumber(string streamId) {
+			return _indexReader.GetStreamLastEventNumber(streamId);
+		}
 
-        IndexReadAllResult IReadIndex.ReadAllEventsForward(TFPos pos, int maxCount)
-        {
-            return _allReader.ReadAllEventsForward(pos, maxCount);
-        }
+		StreamMetadata IReadIndex.GetStreamMetadata(string streamId) {
+			return _indexReader.GetStreamMetadata(streamId);
+		}
 
-        IndexReadAllFilteredResult IReadIndex.ReadAllEventsForwardFiltered(TFPos pos, int maxCount, int maxSearchWindow, StringFilter allowedEventTypes)
-        {
-            return _allReader.ReadAllEventsForwardFiltered(pos, maxCount, maxSearchWindow, allowedEventTypes);
-        }
+		public string GetEventStreamIdByTransactionId(long transactionId) {
+			return _indexReader.GetEventStreamIdByTransactionId(transactionId);
+		}
 
-        IndexReadAllResult IReadIndex.ReadAllEventsBackward(TFPos pos, int maxCount)
-        {
-            return _allReader.ReadAllEventsBackward(pos, maxCount);
-        }
+		StreamAccess IReadIndex.CheckStreamAccess(string streamId, StreamAccessType streamAccessType, IPrincipal user) {
+			return _indexReader.CheckStreamAccess(streamId, streamAccessType, user);
+		}
 
-        ReadIndexStats IReadIndex.GetStatistics()
-        {
-            return new ReadIndexStats(Interlocked.Read(ref TFChunkReader.CachedReads),
-                                      Interlocked.Read(ref TFChunkReader.NotCachedReads),
-                                      _indexReader.CachedStreamInfo,
-                                      _indexReader.NotCachedStreamInfo,
-                                      _indexReader.HashCollisions,
-                                      _indexWriter.CachedTransInfo,
-                                      _indexWriter.NotCachedTransInfo);
-        }
+		IndexReadAllResult IReadIndex.ReadAllEventsForward(TFPos pos, int maxCount) {
+			return _allReader.ReadAllEventsForward(pos, maxCount);
+		}
 
-        public void Close()
-        {
-            Dispose();
-        }
+		IndexReadAllResult IReadIndex.ReadAllEventsBackward(TFPos pos, int maxCount) {
+			return _allReader.ReadAllEventsBackward(pos, maxCount);
+		}
 
-        public void Dispose()
-        {
-            _indexCommitter.Dispose();
-        }
-    }
+		ReadIndexStats IReadIndex.GetStatistics() {
+			return new ReadIndexStats(Interlocked.Read(ref TFChunkReader.CachedReads),
+				Interlocked.Read(ref TFChunkReader.NotCachedReads),
+				_indexReader.CachedStreamInfo,
+				_indexReader.NotCachedStreamInfo,
+				_indexReader.HashCollisions,
+				_indexWriter.CachedTransInfo,
+				_indexWriter.NotCachedTransInfo);
+		}
+
+		public void Close() {
+			Dispose();
+		}
+
+		public void Dispose() {
+			_indexCommitter.Dispose();
+		}
+	}
 }
